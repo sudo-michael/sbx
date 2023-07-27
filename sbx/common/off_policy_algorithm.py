@@ -116,3 +116,4 @@ class OffPolicyAlgorithmJax(OffPolicyAlgorithm):
         )
         # Convert train freq parameter to TrainFreq object
         self._convert_train_freq()
+
