@@ -120,7 +120,7 @@ class TQCPolicy(BaseJaxPolicy):
 
         self.key = self.noise_key = jax.random.PRNGKey(0)
 
-    def build(self, key: jax.random.KeyArray, lr_schedule: Schedule, qf_learning_rate: float, qfc_learning_rate) -> jax.random.KeyArray:
+    def build(self, key: jax.random.KeyArray, lr_schedule: Schedule, qf_learning_rate: float) -> jax.random.KeyArray:
         key, actor_key, qf1_key, qf2_key = jax.random.split(key, 4)
         key, dropout_key1, dropout_key2, self.key = jax.random.split(key, 4)
         # Initialize noise
@@ -271,7 +271,7 @@ class TQCLagPolicy(BaseJaxPolicy):
 
         self.key = self.noise_key = jax.random.PRNGKey(0)
 
-    def build(self, key: jax.random.KeyArray, lr_schedule: Schedule, qf_learning_rate: float, qfc_learning_rate: float) -> jax.random.KeyArray:
+    def build(self, key: jax.random.KeyArray, lr_schedule: Schedule, qf_learning_rate: float) -> jax.random.KeyArray:
         key, actor_key, qf1_key, qf2_key = jax.random.split(key, 4)
         key, dropout_key1, dropout_key2, self.key = jax.random.split(key, 4)
         # Initialize noise
