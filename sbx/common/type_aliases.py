@@ -15,3 +15,4 @@ class ReplayBufferSamplesNp(NamedTuple):
     next_observations: np.ndarray
     dones: np.ndarray
     rewards: np.ndarray
+    costs: np.ndarray = None
