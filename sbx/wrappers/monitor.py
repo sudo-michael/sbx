@@ -107,7 +107,7 @@ class SafeMonitor(gym.Wrapper[ObsType, ActType, ObsType, ActType]):
             ep_len = len(self.rewards)
             ep_info = {"r": round(ep_rew, 6), "c": round(ep_cos, 6), "l": ep_len, "t": round(time.time() - self.t_start, 6)}
             for key in self.info_keywords:
-                ep_info[key] [key]
+                ep_info[key] = info[key]
             self.episode_returns.append(ep_rew)
             self.episode_costs.append(ep_cos)
             self.episode_lengths.append(ep_len)
