@@ -1,5 +1,6 @@
 __all__ = ["Monitor", "ResultsWriter", "get_monitor_files", "load_results"]
 
+import collections
 import csv
 import json
 import os
@@ -98,6 +99,7 @@ class SafeMonitor(gym.Wrapper[ObsType, ActType, ObsType, ActType]):
         observation, reward, terminated, truncated, info = self.env.step(action)
         cost = info.get('cost', 0.0)
         self.rewards.append(float(reward))
+        self.costs.append(float(cost))
         if terminated or truncated:
             self.needs_reset = True
             ep_rew = sum(self.rewards)
@@ -147,7 +149,7 @@ class SafeMonitor(gym.Wrapper[ObsType, ActType, ObsType, ActType]):
 
         :return:
         """
-        return sum(self.episode_costs) / len(self.episode_costs)
+        return sum(self.episode_costs) / (len(self.episode_costs) + 1)
 
     def get_episode_lengths(self) -> List[int]:
         """
@@ -196,11 +198,11 @@ class ResultsWriter:
     ):
         if header is None:
             header = {}
-        if not filename.endswith(Monitor.EXT):
+        if not filename.endswith(SafeMonitor.EXT):
             if os.path.isdir(filename):
-                filename = os.path.join(filename, Monitor.EXT)
+                filename = os.path.join(filename, SafeMonitor.EXT)
             else:
-                filename = filename + "." + Monitor.EXT
+                filename = filename + "." + SafeMonitor.EXT
         filename = os.path.realpath(filename)
         # Create (if any) missing filename directories
         os.makedirs(os.path.dirname(filename), exist_ok=True)

@@ -9,14 +9,13 @@ import numpy as np
 import optax
 from flax.training.train_state import TrainState
 from gymnasium import spaces
-from stable_baselines3.common.buffers import ReplayBuffer
 from stable_baselines3.common.noise import ActionNoise
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 
 from sbx.common.safe_off_policy_algorithm import SafeOffPolicyAlgorithmJax
 from sbx.common.type_aliases import ReplayBufferSamplesNp, RLTrainState
 from sbx.tqc.policies import TQCLagPolicy
-
+from sbx.buffers.buffers import SafeReplayBuffer
 
 class EntropyCoef(nn.Module):
     ent_coef_init: float = 1.0
@@ -44,7 +43,7 @@ class LagCoef(nn.Module):
     @nn.compact
     def __call__(self) -> jnp.ndarray:
         log_lag_coef = self.param("log_lag_coef", init_fn=lambda key: jnp.full((), jnp.log(self.lag_coef_init)))
-        return jnp.exp(log_lag_coef)
+        return jnp.clip(jnp.exp(log_lag_coef), a_min=0.0, a_max=50.0)
 
 
 class LagEntropyCoef(nn.Module):
@@ -85,11 +84,11 @@ class TQCLag(SafeOffPolicyAlgorithmJax):
         policy_delay: int = 1,
         top_quantiles_to_drop_per_net: int = 2,
         action_noise: Optional[ActionNoise] = None,
-        replay_buffer_class: Optional[Type[ReplayBuffer]] = None,
+        replay_buffer_class: Optional[Type[SafeReplayBuffer]] = None,
         replay_buffer_kwargs: Optional[Dict[str, Any]] = None,
         ent_coef: Union[str, float] = "auto",
         lag_coef: Union[str, float] = "auto",
-        cost_limit: float = 5.0,
+        cost_limit: float = 25.0,
         use_sde: bool = False,
         sde_sample_freq: int = -1,
         use_sde_at_warmup: bool = False,
@@ -150,7 +149,7 @@ class TQCLag(SafeOffPolicyAlgorithmJax):
             # pytype: enable=not-instantiable
             assert isinstance(self.qf_learning_rate, float)
 
-            self.key = self.policy.build(self.key, self.lr_schedule, self.qf_learning_rate)
+            self.key = self.policy.build(self.key, self.lr_schedule, self.qf_learning_rate, self.qfc_learning_rate)
 
             self.key, ent_key = jax.random.split(self.key, 2)
 
@@ -273,7 +272,7 @@ class TQCLag(SafeOffPolicyAlgorithmJax):
             self.tau,
             self.target_entropy,
             self.cost_limit,
-            self.env.get_average_episode_costs(),
+            self.env.envs[0].get_average_episode_costs(), # unwrap until it's at the SafeMonitor Wrapper
             gradient_steps,
             self.policy.n_target_quantiles,
             data,
@@ -285,7 +284,6 @@ class TQCLag(SafeOffPolicyAlgorithmJax):
             self.policy.actor_state,
             self.ent_coef_state,
             self.lag_coef_state,
-            self.env.get_average_episode_costs(),
             self.key,
         )
         self._n_updates += gradient_steps
@@ -486,7 +484,7 @@ class TQCLag(SafeOffPolicyAlgorithmJax):
 
             # Concatenate quantiles from both critics
             # (batch, n_quantiles, n_critics)
-            qf_pi = jnp.concatenate((qfc1_pi, qfc2_pi), axis=1)
+            qf_pi = jnp.concatenate((qf1_pi, qf2_pi), axis=1)
             qf_pi = qf_pi.mean(axis=2).mean(axis=1, keepdims=True)
 
             qfc1_pi = qfc1_state.apply_fn(
@@ -512,7 +510,7 @@ class TQCLag(SafeOffPolicyAlgorithmJax):
             qfc_pi = qfc_pi.mean(axis=2).mean(axis=1, keepdims=True)
 
             ent_coef_value = ent_coef_state.apply_fn({"params": ent_coef_state.params})
-            lag_coef_value = ent_coef_state.apply_fn({"params": lag_coef_state.params})
+            lag_coef_value = lag_coef_state.apply_fn({"params": lag_coef_state.params})
             return (lag_coef_value * qfc_pi + ent_coef_value * log_prob - qf_pi).mean(), -log_prob.mean()
 
         (actor_loss_value, entropy), grads = jax.value_and_grad(actor_loss, has_aux=True)(actor_state.params)
@@ -589,7 +587,7 @@ class TQCLag(SafeOffPolicyAlgorithmJax):
                 return x[batch_size * step : batch_size * (step + 1)]
 
             (
-                (qf1_state, qf2_state),
+                ((qf1_state, qf2_state, qfc1_state, qfc2_state)),
                 (qf1_loss_value, qf2_loss_value, qfc1_loss_value, qfc2_loss_value, ent_coef_value, lag_coef_value),
                 key,
             ) = TQCLag.update_critic(
@@ -614,10 +612,12 @@ class TQCLag(SafeOffPolicyAlgorithmJax):
 
             # hack to be able to jit (n_updates % policy_delay == 0)
             if i in policy_delay_indices:
-                (actor_state, (qf1_state, qf2_state, qfc1_state, qfc2_state), actor_loss_value, key, entropy, lagrange) = TQCLag.update_actor(
+                (actor_state, (qf1_state, qf2_state, qfc1_state, qfc2_state), actor_loss_value, key, entropy) = TQCLag.update_actor(
                     actor_state,
                     qf1_state,
                     qf2_state,
+                    qfc1_state,
+                    qfc2_state,
                     ent_coef_state,
                     lag_coef_state,
                     slice(data.observations),

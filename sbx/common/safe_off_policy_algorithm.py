@@ -108,7 +108,7 @@ class SafeOffPolicyAlgorithm(BaseAlgorithm):
         verbose: int = 0,
         device: Union[th.device, str] = "auto",
         support_multi_env: bool = False,
-        monitor_wrapper: bool = True,
+        monitor_wrapper: bool = False,
         seed: Optional[int] = None,
         use_sde: bool = False,
         sde_sample_freq: int = -1,
@@ -140,7 +140,7 @@ class SafeOffPolicyAlgorithm(BaseAlgorithm):
         self.gradient_steps = gradient_steps
         self.action_noise = action_noise
         self.optimize_memory_usage = optimize_memory_usage
-        self.replay_buffer: Optional[ReplayBuffer] = None
+        self.replay_buffer: Optional[SafeReplayBuffer] = None
         self.replay_buffer_class = replay_buffer_class
         self.replay_buffer_kwargs = replay_buffer_kwargs or {}
         self._episode_storage = None
@@ -185,8 +185,9 @@ class SafeOffPolicyAlgorithm(BaseAlgorithm):
         if self.replay_buffer_class is None:
             if isinstance(self.observation_space, spaces.Dict):
                 self.replay_buffer_class = DictReplayBuffer
+                assert False, "DictReplayBuffer not implemented yet"
             else:
-                self.replay_buffer_class = ReplayBuffer
+                self.replay_buffer_class = SafeReplayBuffer
 
         if self.replay_buffer is None:
             # Make a local copy as we should not pickle
@@ -408,7 +409,6 @@ class SafeOffPolicyAlgorithm(BaseAlgorithm):
         if len(self.ep_info_buffer) > 0 and len(self.ep_info_buffer[0]) > 0:
             self.logger.record("rollout/ep_rew_mean", safe_mean([ep_info["r"] for ep_info in self.ep_info_buffer]))
             self.logger.record("rollout/ep_len_mean", safe_mean([ep_info["l"] for ep_info in self.ep_info_buffer]))
-            breakpoint()
             self.logger.record("rollout/ep_cost_mean", safe_mean([ep_info["c"] for ep_info in self.ep_info_buffer]))
         self.logger.record("time/fps", fps)
         self.logger.record("time/time_elapsed", int(time_elapsed), exclude="tensorboard")
@@ -558,8 +558,7 @@ class SafeOffPolicyAlgorithm(BaseAlgorithm):
             # Rescale and perform action
             new_obs, rewards, dones, infos = env.step(actions)
 
-            breakpoint()
-            costs = np.array([info.get("cost", 0) for info in infos])j
+            costs = np.array([info.get("cost", 0) for info in infos])
 
             self.num_timesteps += env.num_envs
             num_collected_steps += 1
@@ -617,7 +616,7 @@ class SafeOffPolicyAlgorithmJax(SafeOffPolicyAlgorithm):
         train_freq: Union[int, Tuple[int, str]] = (1, "step"),
         gradient_steps: int = 1,
         action_noise: Optional[ActionNoise] = None,
-        replay_buffer_class: Optional[Type[ReplayBuffer]] = None,
+        replay_buffer_class: Optional[Type[SafeReplayBuffer]] = None,
         replay_buffer_kwargs: Optional[Dict[str, Any]] = None,
         optimize_memory_usage: bool = False,
         policy_kwargs: Optional[Dict[str, Any]] = None,
@@ -662,7 +661,7 @@ class SafeOffPolicyAlgorithmJax(SafeOffPolicyAlgorithm):
         self.key = jax.random.PRNGKey(0)
         # Note: we do not allow schedule for it
         self.qf_learning_rate = qf_learning_rate
-        self.qfc_learning_rate = qf_learning_rate
+        self.qfc_learning_rate = qfc_learning_rate
 
     def _get_torch_save_params(self):
         return [], []
@@ -683,8 +682,9 @@ class SafeOffPolicyAlgorithmJax(SafeOffPolicyAlgorithm):
         if self.replay_buffer_class is None:  # type: ignore[has-type]
             if isinstance(self.observation_space, spaces.Dict):
                 self.replay_buffer_class = DictReplayBuffer
+                assert False, "DictReplayBuffer not implemented yet"
             else:
-                self.replay_buffer_class = ReplayBuffer
+                self.replay_buffer_class = SafeReplayBuffer
 
         self._setup_lr_schedule()
         # By default qf_learning_rate = pi_learning_rate

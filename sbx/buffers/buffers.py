@@ -1,6 +1,6 @@
 import warnings
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Generator, List, Optional, Union
+from typing import Any, Dict, Generator, List, NamedTuple, Optional, Union
 
 import numpy as np
 import torch as th
@@ -22,7 +22,7 @@ try:
 except ImportError:
     psutil = None
 
-from stable_baselines_3.common.buffers import BaseBuffer
+from stable_baselines3.common.buffers import BaseBuffer
 
 class SafeReplayBufferSamples(NamedTuple):
     observations: th.Tensor
