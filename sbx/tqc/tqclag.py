@@ -43,7 +43,7 @@ class LagCoef(nn.Module):
     @nn.compact
     def __call__(self) -> jnp.ndarray:
         log_lag_coef = self.param("log_lag_coef", init_fn=lambda key: jnp.full((), jnp.log(self.lag_coef_init)))
-        return jnp.clip(jnp.exp(log_lag_coef), a_min=0.0, a_max=50.0)
+        return jnp.clip(jnp.exp(log_lag_coef), a_min=0.0, a_max=10.0)
 
 
 class LagEntropyCoef(nn.Module):
@@ -557,7 +557,7 @@ class TQCLag(SafeOffPolicyAlgorithmJax):
         return lag_coef_state, lag_coef_loss
 
     @staticmethod
-    @partial(jax.jit, static_argnames=["gradient_steps", "n_target_quantiles", "mean_cost", "cost_limit"])
+    # @partial(jax.jit, static_argnames=["gradient_steps", "n_target_quantiles", "mean_cost", "cost_limit"])
     def _train(
         gamma: float,
         tau: float,
